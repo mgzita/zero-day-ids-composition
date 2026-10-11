@@ -1,41 +1,34 @@
-# Architecture-by-Target Mechanisms of Training-Environment Diversity in Unsupervised Anomaly Detection
+# From Domain Shift to Zero-Day Resilience: Training-Environment Composition for Network Intrusion Detection
 
-Code for:
+Code and results for:
 
-> M. Zita, M. U. Rehman, M. Abrar, M. Kazim, and S. Khalid. *Architecture-by-Target Mechanisms of Training-Environment Diversity in Unsupervised Anomaly Detection.* Manuscript in preparation, De Montfort University, 2026.
+> M. Zita, M. U. Rehman, M. Kazim, and A. H. Al-Bayatti. *From Domain Shift to Zero-Day Resilience: Training-Environment Composition for Network Intrusion Detection.* In Proc. International Conference on Electrical and Computer Engineering Researches (ICECER 2026), Istanbul, Türkiye, 3 to 5 December 2026.
 
-This study follows [zero-day-ids-ensemble](https://github.com/mgzita/zero-day-ids-ensemble), which showed that training on benign traffic from several environments improves detection in an unseen environment. Here we ask *how* that diversity changes model behavior. Three kinds of evidence are compared: feature attribution (KernelSHAP and Integrated Gradients), functional feature ablation, and representation-level distance (MMD² and sliced Wasserstein).
+The study tests whether combining architecturally different unsupervised models, trained under diverse conditions, improves detection in network environments the models have never seen. Three models are trained only on benign traffic under identical size-matched conditions: a Denoising Autoencoder (DAE), a Transformer Autoencoder (TrAE), and Deep SVDD. Two ensembles average their normalized scores: Ens-2 (DAE and TrAE) and Ens-3 (all three).
 
-## Design
+## Key results (five seeds)
 
-| Element | Setting |
+| Finding | Result |
 |---|---|
-| Models | Autoencoder (AE), Denoising Autoencoder (DAE), Deep SVDD, Normalizing Flow |
-| Target domains (never seen in training) | UNSW-NB15, IEC-104 (industrial control traffic), SMD (server telemetry, native 38-feature space) |
-| Training conditions | Single (one source) and Diverse (two sources, size-matched to Single) |
-| Network training sources | CIC-IDS2017 and CSE-CIC-IDS2018 |
-| Seeds | Ten per model and target combination |
-| Statistics | Paired t-test, Wilcoxon signed-rank, paired Cohen's d, Benjamini–Hochberg false discovery rate correction across 48 tests |
+| UNSW-NB15 ROC-AUC, single-environment training | 0.444 to 0.570 |
+| UNSW-NB15 ROC-AUC, multi-environment training that includes UNSW-NB15 benign traffic | 0.831 to 0.934 |
+| Controlled test with UNSW-NB15 excluded from both conditions | no reliable improvement |
+| Best model, CIC-IDS2017 held out (LODO-1) | Ens-3, AUC 0.857 |
+| Best model, CSE-CIC-IDS2018 held out (LODO-2) | TrAE, AUC 0.944 |
+| All models, UNSW-NB15 held out (LODO-3) | normalized AUC 0.44 to 0.50, F1 about 0.05 |
+| DAE raw AUC under LODO-3 | 0.14 to 0.19; attacks score lower than benign traffic in all 20 seed and configuration combinations |
 
-## Key results
-
-- 13 of 48 tests survive false discovery rate correction.
-- KernelSHAP showed apparent effects for four of twelve model and target combinations; none was reproduced with Integrated Gradients.
-- Functional ablation effects depend on both model and target. Deep SVDD reverses from Sensitive-feature dominance on UNSW-NB15 (d = 3.04) to Stable-feature dominance on IEC-104 (d = −1.08); the Normalizing Flow shows the same reversal between UNSW-NB15 and SMD.
-- The apparent IEC-104 Normalizing Flow reversal in MMD² is a radial basis function kernel bandwidth artifact. Sliced Wasserstein distance shows a narrower representation gap under Diverse training.
-- The model by target interaction is significant (Wald F(6, 79) = 57.427, p < 0.00001).
+The gain on UNSW-NB15 comes from target-domain coverage rather than diversity alone, and neither ensemble consistently beats the best single model.
 
 ## Datasets
 
-Place raw files under `raw_data/` (not tracked):
+Download the datasets and place them under `data/` (not tracked):
 
 - CIC-IDS2017: https://www.unb.ca/cic/datasets/ids-2017.html
 - CSE-CIC-IDS2018: https://www.unb.ca/cic/datasets/ids-2018.html
 - UNSW-NB15: https://research.unsw.edu.au/projects/unsw-nb15-dataset
-- IEC-104: see the dataset reference in the paper
-- SMD (Server Machine Dataset): https://github.com/NetManAIOps/OmniAnomaly
 
-Paths and frozen design settings are in `preprocessing/config.py`.
+The scripts use the 18-feature harmonized space, IQR scaling, and deduplicated splits from [zero-day-ids-ensemble](https://github.com/mgzita/zero-day-ids-ensemble). Check the paths near the top of each script before running.
 
 ## Setup
 
@@ -47,40 +40,35 @@ pip install -r requirements.txt
 
 ## Reproducing the paper
 
-Run all commands from the repository root.
+Run scripts from the repository root. All results use seeds 42, 123, 456, 789, and 999.
 
-### 1. Preprocessing
+### 1. Training
 
 | Step | Script |
 |---|---|
-| Dataset loaders | `preprocessing/loaders/*.py` |
-| IEC-104 and SMD harmonization | `preprocessing/harmonize_iec104.py`, `preprocessing/harmonize_smd.py` |
-| Final preprocessing and audit | `preprocessing/finalize_preprocessing.py`, `preprocessing/audit_cleaned_data.py` |
+| Transformer Autoencoder | `scripts/train_transformer_ae.py` |
+| DAE and TrAE, single and multi-environment | `scripts/train_paper3.py` |
+| Deep SVDD | `scripts/train_svdd_paper3.py`, `scripts/run_missing_svdd.py` |
 
-### 2. Training and full pipelines
+### 2. Leave-one-dataset-out (LODO)
 
-| Target | AE, DAE, Deep SVDD | Normalizing Flow |
-|---|---|---|
-| UNSW-NB15 | `train_ae_dae_lodo3_checkpoints.py`, `extend_ae_dae_svdd_unsw_h1_repr.py` | `train_normalizing_flow.py`, `flow_full_pipeline.py` |
-| IEC-104 | `ae_dae_svdd_pipeline_iec104.py` | `flow_full_pipeline_iec104.py` |
-| SMD | `ae_dae_svdd_pipeline_smd.py` | `flow_full_pipeline_smd.py` |
-
-### 3. Analyses
-
-| Paper result | Script |
+| Step | Script |
 |---|---|
-| Integrated Gradients attribution | `compute_ig_attribution_all.py`, `analyze_ig_results.py` |
-| Attribution tables (SHAP and IG) | `generate_h1_latex_tables.py` |
-| Functional ablation | `ablation_h3_lodo3.py`, `ablation_h3_lodo3_extra_seeds.py`, `combine_h3_lodo3_seeds.py` |
-| Decorrelated feature groups | `ablation_h4_v2_decorrelated.py` |
-| Representation distance (MMD²) | `compute_flow_representation_stats.py` |
-| Representation distance (sliced Wasserstein) | `compute_flow_representation_stats_wasserstein.py`, `representation_interaction_wasserstein.py` |
-| MMD² bandwidth artifact diagnosis | `flow_iec104_mmd_bandwidth_sweep.py`, `flow_iec104_repr_diagnostic.py` |
-| SMD statistics | `analyze_smd_results.py`, `analyze_flow_smd_results.py` |
-| Noise dose-response sweep | `noise_dose_response_sweep.py`, `noise_trend_test.py` |
-| Fallback scorer usage | `fallback_usage_tally.py` |
-| Combine all results | `final_combine_all_results.py` |
-| Check every number in the manuscript | `verify_all_manuscript_numbers.py` |
+| LODO-1, LODO-2, and LODO-3 | `scripts/run_lodo_paper3.py` |
+| Individual folds and additional seeds | `scripts/run_lodo2_only.py`, `scripts/run_lodo3_only.py`, `scripts/run_lodo_789_999.py`, `scripts/rerun_seed999.py` |
+
+### 3. Analysis
+
+| Paper result | Script | Output in `results_fixed/` |
+|---|---|---|
+| Single versus multi-environment, LODO, extended metrics, clean diversity | `scripts/paper3_consolidated.py`, `scripts/targeted_raw_auc_fix.py` | `table3_single_multi.csv`, `table4_lodo.csv`, `table5_extended_metrics.csv`, `table7_clean_diversity.csv` |
+| Extended metrics | `scripts/extended_analysis.py` | `table5_extended_metrics.csv` |
+| Score correlation between models | `scripts/error_correlation.py` | `table6_score_correlation.csv` |
+| Raw AUC and DAE score inversion | `scripts/svdd_raw_auc.py`, `scripts/raw_auc_summary_stats.py`, `scripts/diagnostic_all_seeds.py` | `svdd_raw_auc.csv`, `diagnostic_reversal_check.csv`, `table_lodo3_table7_raw_fixed.csv` |
+| Rank-based fusion under LODO-3 | `scripts/lodo3_dump_scores.py`, `scripts/lodo3_rank_fusion.py` | `lodo3_rank_fusion.csv` |
+| Single-environment raw AUC check | `scripts/check_table3_single_raw.py` | `table3_single_raw_check.csv` |
+
+`scripts/smoke_test.py` runs a quick end-to-end check of the pipeline.
 
 ## License
 
