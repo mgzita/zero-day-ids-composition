@@ -1,0 +1,14 @@
+﻿__pycache__/
+*.pyc
+.venv/
+venv/
+data/
+checkpoints/
+*.pt
+*.pth
+*.pkl
+*.npz
+*.npy
+*.txt
+!requirements.txt
+results/
